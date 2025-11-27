@@ -31,7 +31,7 @@ class QuestionWidget(QWidget):
         self.main_layout.addWidget(self.question_label)
 
         # Difficulty indicator for medical questions
-        if question.difficulty:
+        if getattr(question, 'difficulty', None):
             self._add_difficulty_indicator()
 
         self.setLayout(self.main_layout)
@@ -117,7 +117,9 @@ class HostQuestionWidget(QuestionWidget):
             self._setup_rationale_display()
 
         # Specialty/system tags for medical questions
-        if question.specialty or question.organ_system:
+        specialty = getattr(question, 'specialty', None)
+        organ_system = getattr(question, 'organ_system', None)
+        if specialty or organ_system:
             self._add_medical_tags()
 
     def _setup_rationale_display(self):
@@ -135,10 +137,12 @@ class HostQuestionWidget(QuestionWidget):
     def _add_medical_tags(self):
         """Add specialty and organ system tags."""
         tags = []
-        if self.question.specialty:
-            tags.append(f"<span style='color: #81C784;'>{self.question.specialty}</span>")
-        if self.question.organ_system:
-            tags.append(f"<span style='color: #FFB74D;'>{self.question.organ_system}</span>")
+        specialty = getattr(self.question, 'specialty', None)
+        organ_system = getattr(self.question, 'organ_system', None)
+        if specialty:
+            tags.append(f"<span style='color: #81C784;'>{specialty}</span>")
+        if organ_system:
+            tags.append(f"<span style='color: #FFB74D;'>{organ_system}</span>")
 
         tag_label = QLabel(" | ".join(tags), self)
         tag_label.setStyleSheet("font-size: 12px;")

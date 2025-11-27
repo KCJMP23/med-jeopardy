@@ -97,26 +97,26 @@ def main():
             print("Use --list to see available conditions.")
             sys.exit(1)
 
-        # Set up sys.argv for main app
         game = CONDITION_GAMES[args.condition]
-        print(f"\nLaunching {game.condition_name} game...")
-        print(f"Categories: {', '.join(game.categories)}")
-        print(f"Duration: ~{game.estimated_duration} minutes\n")
-
-        # TODO: Integrate with main game launch
-        # For now, this demonstrates the game loading capability
         game_data = get_condition_game(args.condition)
-        if game_data:
-            print(f"Game data loaded successfully!")
-            print(f"Rounds: {len(game_data.rounds)}")
-            print(f"Title: {game_data.date}")
 
-            # Launch the actual game
-            sys.argv = ['jparty', '--preset', 'gme']
-            from jparty.main import main as jparty_main
-            # Note: Full integration would inject game_data into the game
-            # For now, this launches with standard game loading
-            jparty_main()
+        if game_data:
+            print(f"\n{'='*60}")
+            print(f"CONDITION GAME: {game.condition_name}")
+            print(f"{'='*60}")
+            print(f"Categories: {', '.join(game.categories)}")
+            print(f"Duration: ~{game.estimated_duration} minutes")
+            print(f"Rounds: {len(game_data.rounds)}")
+            print(f"Questions per round: 30")
+            print(f"\nGame data validated and ready.")
+            print(f"{'='*60}")
+            # TODO: Inject game_data into jparty.main via a new --game-data parameter
+            # or module-level game loader. For now, use --info to preview game content.
+            print("\nNote: Direct game launch pending integration with jparty.main.")
+            print("Use --info to view full game details.")
+        else:
+            print(f"Failed to load game data for '{args.condition}'.")
+            sys.exit(1)
         return
 
     # No arguments - show help

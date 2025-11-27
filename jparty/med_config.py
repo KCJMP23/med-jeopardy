@@ -232,6 +232,7 @@ class MedJeopardyConfig:
             teams=TeamConfig(enabled=True, max_teams=5)
         )
         config.apply_audience_preset()
+        config.apply_game_mode()
         return config
 
     @classmethod

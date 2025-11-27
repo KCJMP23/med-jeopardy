@@ -112,17 +112,18 @@ class CMETracker:
     def record_participant(self, player):
         """Record a new participant in the session."""
         if player.name not in self.participants:
+            team = getattr(player, 'team', None)
             self.participants[player.name] = ParticipantRecord(
                 name=player.name,
-                team=getattr(player, 'team', None),
+                team=team,
                 joined_at=datetime.now().isoformat()
             )
 
             # Record team membership if in team mode
-            if player.team:
-                if player.team not in self.teams:
-                    self.teams[player.team] = TeamRecord(name=player.team)
-                self.teams[player.team].members.append(player.name)
+            if team:
+                if team not in self.teams:
+                    self.teams[team] = TeamRecord(name=team)
+                self.teams[team].members.append(player.name)
 
             logging.info(f"CME: Recorded participant {player.name}")
 

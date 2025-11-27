@@ -33,14 +33,19 @@ class VerticalConfig:
     support_email: Optional[str] = None
 
 
+# Original Jeopardy blue colors - used across all verticals
+JEOPARDY_BLUE = "#1010a1"
+JEOPARDY_DARK_BLUE = "#0b0b74"
+
+
 # Board Study Vertical Configuration
 BOARDS_CONFIG = VerticalConfig(
     vertical=Vertical.BOARDS,
     app_name="MedJeopardy-Boards",
     app_title="Med-Jeopardy: Board Study",
     tagline="Master the Boards, One Question at a Time",
-    primary_color="#1565C0",  # Blue (study/academic)
-    secondary_color="#42A5F5",
+    primary_color=JEOPARDY_BLUE,
+    secondary_color=JEOPARDY_DARK_BLUE,
     default_categories=[
         "Cardiology",
         "Pulmonology",
@@ -72,8 +77,8 @@ GME_CONFIG = VerticalConfig(
     app_name="MedJeopardy-GME",
     app_title="Med-Jeopardy: GME Edition",
     tagline="Interactive Learning for Residency Training",
-    primary_color="#2E7D32",  # Green (growth/education)
-    secondary_color="#66BB6A",
+    primary_color=JEOPARDY_BLUE,
+    secondary_color=JEOPARDY_DARK_BLUE,
     default_categories=[
         "Morning Report",
         "Case Conference",
@@ -104,8 +109,8 @@ CME_CONFIG = VerticalConfig(
     app_name="MedJeopardy-CME",
     app_title="Med-Jeopardy: CME Edition",
     tagline="Engaging CME for Healthcare Professionals",
-    primary_color="#6A1B9A",  # Purple (professional/premium)
-    secondary_color="#AB47BC",
+    primary_color=JEOPARDY_BLUE,
+    secondary_color=JEOPARDY_DARK_BLUE,
     default_categories=[
         "Updates in Practice",
         "Guidelines Review",
@@ -137,8 +142,8 @@ GENERIC_CONFIG = VerticalConfig(
     app_name="MedJeopardy",
     app_title="Med-Jeopardy",
     tagline="Medical Education Through Gamification",
-    primary_color="#1010a1",  # Original Jeopardy blue
-    secondary_color="#0b0b74",
+    primary_color=JEOPARDY_BLUE,
+    secondary_color=JEOPARDY_DARK_BLUE,
     default_categories=[
         "Anatomy",
         "Physiology",

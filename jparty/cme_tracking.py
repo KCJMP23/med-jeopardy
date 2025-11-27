@@ -106,6 +106,14 @@ class CMETracker:
         """Set the total number of questions available in the game."""
         self.total_questions = count
 
+    def _get_min_questions(self) -> int:
+        """Get minimum questions threshold from config or return default.
+
+        Centralizes the logic for determining CME eligibility threshold.
+        """
+        cme_config = getattr(self.config, 'cme_tracking', None)
+        return getattr(cme_config, 'minimum_questions_answered', 5) if cme_config else 5
+
     def start_session(self, total_questions: int = 0):
         """Mark the start of a CME session.
 
@@ -208,8 +216,15 @@ class CMETracker:
             specialties_covered=list(self.specialties_covered)
         )
 
-    def get_eligible_participants(self, min_questions: int = 5) -> List[ParticipantRecord]:
-        """Get list of participants who meet minimum participation requirements."""
+    def get_eligible_participants(self, min_questions: Optional[int] = None) -> List[ParticipantRecord]:
+        """Get list of participants who meet minimum participation requirements.
+
+        Args:
+            min_questions: Minimum questions threshold. If None, uses config value
+                          or default of 5.
+        """
+        if min_questions is None:
+            min_questions = self._get_min_questions()
         return [
             p for p in self.participants.values()
             if p.meets_minimum_participation(min_questions)
@@ -240,8 +255,7 @@ class CMETracker:
                 "Accuracy %", "Final Score", "CME Eligible", "Completed"
             ])
 
-            cme_config = getattr(self.config, 'cme_tracking', None)
-            min_questions = getattr(cme_config, 'minimum_questions_answered', 5) if cme_config else 5
+            min_questions = self._get_min_questions()
 
             for p in report.participants:
                 writer.writerow([
@@ -325,8 +339,7 @@ class CMETracker:
             writer = csv.writer(f)
             writer.writerow(["Participant Name", "Questions Answered", "CME Eligible"])
 
-            cme_config = getattr(self.config, 'cme_tracking', None)
-            min_questions = getattr(cme_config, 'minimum_questions_answered', 5) if cme_config else 5
+            min_questions = self._get_min_questions()
 
             for p in self.participants.values():
                 writer.writerow([

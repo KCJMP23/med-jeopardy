@@ -21,6 +21,7 @@ Usage:
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 from jparty.game import Question, Board, FinalBoard, GameData
+import logging
 
 
 @dataclass
@@ -104,6 +105,9 @@ def _build_game_data(cg: ConditionGame) -> GameData:
 
     for col, cat in enumerate(r1_categories):
         cat_questions = [q for q in cg.questions if q.get("category") == cat]
+        if not cat_questions:
+            logging.warning(f"Category '{cat}' has no questions in {cg.condition_name} game - skipping")
+            continue
         for row, val in enumerate(values):
             if row < len(cat_questions):
                 q = cat_questions[row]
@@ -128,22 +132,25 @@ def _build_game_data(cg: ConditionGame) -> GameData:
 
     for col, cat in enumerate(r1_categories):
         cat_questions = [q for q in cg.questions if q.get("category") == cat]
+        if not cat_questions:
+            # Already warned in Round 1, skip silently here
+            continue
         for row, val in enumerate(values_dj):
+            # Use questions 5-9 if available, otherwise wrap around
             q_idx = row + 5 if row + 5 < len(cat_questions) else row % len(cat_questions)
-            if q_idx < len(cat_questions):
-                q = cat_questions[q_idx]
-                r2_questions.append(Question(
-                    index=(col, row),
-                    text=q.get("question", ""),
-                    answer=q.get("answer", ""),
-                    category=cat,
-                    value=val,
-                    dd=(row == 3 and col == 2),
-                    rationale=q.get("rationale"),
-                    difficulty=q.get("difficulty", "advanced"),
-                    specialty=q.get("specialty", cg.therapeutic_area),
-                    question_type=q.get("type", "standard")
-                ))
+            q = cat_questions[q_idx]
+            r2_questions.append(Question(
+                index=(col, row),
+                text=q.get("question", ""),
+                answer=q.get("answer", ""),
+                category=cat,
+                value=val,
+                dd=(row == 3 and col == 2),
+                rationale=q.get("rationale"),
+                difficulty=q.get("difficulty", "advanced"),
+                specialty=q.get("specialty", cg.therapeutic_area),
+                question_type=q.get("type", "standard")
+            ))
 
     boards.append(Board(r1_categories, r2_questions, dj=True))
 

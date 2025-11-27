@@ -17,6 +17,11 @@ from jparty.logger import qt_exception_hook
 from jparty.constants import PORT
 from jparty.med_config import MedJeopardyConfig, GameMode, AudienceSize
 from jparty.cme_tracking import CMETracker
+from jparty.verticals import get_vertical_config, get_vertical_from_preset, Vertical
+
+
+# Global vertical config for branding
+CURRENT_VERTICAL = None
 
 
 def check_internet():
@@ -278,8 +283,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_config_from_args(args) -> MedJeopardyConfig:
-    """Build configuration from command-line arguments."""
+def get_config_from_args(args) -> tuple:
+    """Build configuration from command-line arguments.
+
+    Returns:
+        tuple: (MedJeopardyConfig, VerticalConfig)
+    """
+    global CURRENT_VERTICAL
+
     if args.preset:
         presets = {
             "boards": MedJeopardyConfig.for_boards_study,
@@ -288,8 +299,13 @@ def get_config_from_args(args) -> MedJeopardyConfig:
             "cme": MedJeopardyConfig.for_virtual_cme,
         }
         config = presets[args.preset]()
+        vertical = get_vertical_from_preset(args.preset)
     else:
         config = MedJeopardyConfig()
+        vertical = Vertical.GENERIC
+
+    # Set global vertical config
+    CURRENT_VERTICAL = get_vertical_config(vertical)
 
     if args.mode:
         modes = {
@@ -305,7 +321,7 @@ def get_config_from_args(args) -> MedJeopardyConfig:
         config.cme_tracking.enabled = True
         config.track_performance = True
 
-    return config
+    return config, CURRENT_VERTICAL
 
 
 def main():
@@ -323,23 +339,33 @@ def main():
     QFontDatabase.addApplicationFont(resource_path("ITC_ Korinna Normal.ttf"))
 
     # Get configuration
+    global CURRENT_VERTICAL
     config = None
     cme_tracker = None
+    vertical_config = None
 
     if args.preset or args.no_setup:
         # Use command-line configuration
-        config = get_config_from_args(args)
+        config, vertical_config = get_config_from_args(args)
         logging.info(f"Using preset configuration: {args.preset or 'default'}")
+        logging.info(f"Vertical: {vertical_config.app_name}")
     else:
         # Show setup dialog
         setup_dialog = MedicalSetupDialog()
         if setup_dialog.exec() == QDialog.DialogCode.Accepted:
             config = setup_dialog.get_config()
+            CURRENT_VERTICAL = get_vertical_config(Vertical.GENERIC)
+            vertical_config = CURRENT_VERTICAL
             logging.info(f"Configuration: mode={config.game_mode.value}, audience={config.audience_size.value}")
         else:
             # User cancelled - use default config
             config = MedJeopardyConfig()
+            CURRENT_VERTICAL = get_vertical_config(Vertical.GENERIC)
+            vertical_config = CURRENT_VERTICAL
             logging.info("Using default configuration")
+
+    # Store vertical config in game config for access by UI
+    config.vertical = vertical_config
 
     # Initialize CME tracker if enabled
     if config.cme_tracking.enabled:

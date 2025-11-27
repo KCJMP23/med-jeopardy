@@ -275,12 +275,26 @@ class MedJeopardyConfig:
     def from_json(cls, json_str: str) -> 'MedJeopardyConfig':
         """Import configuration from JSON."""
         data = json.loads(json_str)
-        config = cls()
-        # Apply loaded values
-        for key, value in data.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-        return config
+
+        # Reconstruct enums
+        if 'game_mode' in data and isinstance(data['game_mode'], str):
+            data['game_mode'] = GameMode(data['game_mode'])
+        if 'audience_size' in data and isinstance(data['audience_size'], str):
+            data['audience_size'] = AudienceSize(data['audience_size'])
+
+        # Reconstruct nested dataclasses
+        if 'timers' in data and isinstance(data['timers'], dict):
+            data['timers'] = TimerConfig(**data['timers'])
+        if 'points' in data and isinstance(data['points'], dict):
+            data['points'] = PointConfig(**data['points'])
+        if 'teams' in data and isinstance(data['teams'], dict):
+            data['teams'] = TeamConfig(**data['teams'])
+        if 'cme_tracking' in data and isinstance(data['cme_tracking'], dict):
+            data['cme_tracking'] = CMETrackingConfig(**data['cme_tracking'])
+
+        # Filter to only valid attributes and construct
+        valid_attrs = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        return cls(**valid_attrs)
 
 
 # Default configuration instance

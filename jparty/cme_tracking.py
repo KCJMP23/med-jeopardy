@@ -78,11 +78,16 @@ class CMETracker:
 
     Usage:
         tracker = CMETracker(config)
-        tracker.start_session()
+        tracker.start_session(total_questions=60)  # or call set_total_questions later
         tracker.record_participant(player)
         tracker.record_answer(player, question, correct)
         report = tracker.generate_report()
         tracker.export_csv("session_report.csv")
+
+    Note:
+        Callers must set total_questions either via start_session(total_questions=N)
+        or by calling set_total_questions(N) before generating reports. If not set,
+        total_questions will remain 0 in reports.
     """
 
     def __init__(self, config=None):
@@ -97,14 +102,25 @@ class CMETracker:
         self.categories_covered = set()
         self.specialties_covered = set()
 
-    def start_session(self):
-        """Mark the start of a CME session."""
-        self.session_start = datetime.now().isoformat()
+    def set_total_questions(self, count: int):
+        """Set the total number of questions available in the game."""
+        self.total_questions = count
+
+    def start_session(self, total_questions: int = 0):
+        """Mark the start of a CME session.
+
+        Args:
+            total_questions: Total questions available in the game (optional).
+                            Can also be set via set_total_questions().
+        """
+        self.session_start = datetime.now().astimezone().isoformat()
+        if total_questions > 0:
+            self.total_questions = total_questions
         logging.info(f"CME session started at {self.session_start}")
 
     def end_session(self):
         """Mark the end of a CME session."""
-        self.session_end = datetime.now().isoformat()
+        self.session_end = datetime.now().astimezone().isoformat()
         for participant in self.participants.values():
             participant.completed = True
         logging.info(f"CME session ended at {self.session_end}")
@@ -116,7 +132,7 @@ class CMETracker:
             self.participants[player.name] = ParticipantRecord(
                 name=player.name,
                 team=team,
-                joined_at=datetime.now().isoformat()
+                joined_at=datetime.now().astimezone().isoformat()
             )
 
             # Record team membership if in team mode
@@ -183,7 +199,7 @@ class CMETracker:
             credit_type=cme_config.credit_type if cme_config else "AMA PRA Category 1",
             credits_available=cme_config.credits_available if cme_config else 1.0,
             session_start=self.session_start or "",
-            session_end=self.session_end or datetime.now().isoformat(),
+            session_end=self.session_end or datetime.now().astimezone().isoformat(),
             total_questions=self.total_questions,
             questions_played=self.questions_played,
             participants=list(self.participants.values()),

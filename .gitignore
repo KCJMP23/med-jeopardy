@@ -1,5 +1,7 @@
 build/**
-jparty/__pycache__/**
+__pycache__/
+**/__pycache__/
+*.pyc
 latest.log
 dist**
 .idea/**

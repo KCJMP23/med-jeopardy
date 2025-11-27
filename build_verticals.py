@@ -176,12 +176,26 @@ def main():
     if len(sys.argv) > 1:
         # Build specific verticals
         verticals_to_build = sys.argv[1:]
+        results = {}
         for v in verticals_to_build:
             if v not in VERTICALS:
                 print(f"Unknown vertical: {v}")
                 print(f"Available verticals: {', '.join(VERTICALS.keys())}")
                 sys.exit(1)
-            build_vertical(v)
+            results[v] = build_vertical(v)
+
+        # Print summary and exit with appropriate code
+        if len(results) > 1:
+            print(f"\n{'='*60}")
+            print("Build Summary")
+            print(f"{'='*60}")
+            for vertical, success in results.items():
+                status = "SUCCESS" if success else "FAILED"
+                print(f"  {VERTICALS[vertical]['name']}: {status}")
+
+        # Exit with non-zero if any build failed
+        if not all(results.values()):
+            sys.exit(1)
     else:
         # Build all verticals
         success = build_all()

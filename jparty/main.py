@@ -288,9 +288,10 @@ def get_config_from_args(args) -> tuple:
 
     Returns:
         tuple: (MedJeopardyConfig, VerticalConfig)
-    """
-    global CURRENT_VERTICAL
 
+    Note: This function is pure and does not modify global state.
+          The caller should assign the vertical_config to CURRENT_VERTICAL if needed.
+    """
     if args.preset:
         presets = {
             "boards": MedJeopardyConfig.for_boards_study,
@@ -304,8 +305,7 @@ def get_config_from_args(args) -> tuple:
         config = MedJeopardyConfig()
         vertical = Vertical.GENERIC
 
-    # Set global vertical config
-    CURRENT_VERTICAL = get_vertical_config(vertical)
+    vertical_config = get_vertical_config(vertical)
 
     if args.mode:
         modes = {
@@ -321,7 +321,7 @@ def get_config_from_args(args) -> tuple:
         config.cme_tracking.enabled = True
         config.track_performance = True
 
-    return config, CURRENT_VERTICAL
+    return config, vertical_config
 
 
 def main():
@@ -347,6 +347,7 @@ def main():
     if args.preset or args.no_setup:
         # Use command-line configuration
         config, vertical_config = get_config_from_args(args)
+        CURRENT_VERTICAL = vertical_config  # Set global for branding access
         logging.info(f"Using preset configuration: {args.preset or 'default'}")
         logging.info(f"Vertical: {vertical_config.app_name}")
     else:
@@ -410,8 +411,17 @@ def main():
             cme_tracker.end_session()
             cme_tracker.update_final_scores(game.players)
             try:
-                cme_tracker.export_csv("med_jeopardy_session_report.csv")
-                logging.info("CME report exported to med_jeopardy_session_report.csv")
+                # Generate unique filename with timestamp and event name
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                cme_config = getattr(config, 'cme_tracking', None)
+                event_name = getattr(cme_config, 'event_name', 'session') if cme_config else 'session'
+                # Sanitize event name for filename
+                safe_event_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in event_name).strip()
+                safe_event_name = safe_event_name.replace(" ", "_")[:50]  # Limit length
+                report_filename = f"med_jeopardy_{safe_event_name}_{timestamp}.csv"
+                cme_tracker.export_csv(report_filename)
+                logging.info(f"CME report exported to {report_filename}")
             except Exception as e:
                 logging.error(f"Failed to export CME report: {e}")
 

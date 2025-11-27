@@ -224,7 +224,7 @@ class CMETracker:
             ])
 
             cme_config = getattr(self.config, 'cme_tracking', None)
-            min_questions = cme_config.minimum_questions_answered if cme_config else 5
+            min_questions = getattr(cme_config, 'minimum_questions_answered', 5) if cme_config else 5
 
             for p in report.participants:
                 writer.writerow([
@@ -309,7 +309,7 @@ class CMETracker:
             writer.writerow(["Participant Name", "Questions Answered", "CME Eligible"])
 
             cme_config = getattr(self.config, 'cme_tracking', None)
-            min_questions = cme_config.minimum_questions_answered if cme_config else 5
+            min_questions = getattr(cme_config, 'minimum_questions_answered', 5) if cme_config else 5
 
             for p in self.participants.values():
                 writer.writerow([

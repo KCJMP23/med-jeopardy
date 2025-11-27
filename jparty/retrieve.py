@@ -6,11 +6,14 @@ import json
 from jparty.game import Question, Board, FinalBoard, GameData
 import logging
 import csv
-from jparty.constants import MONIES
+from jparty.constants import MONIES, MED_POINTS
 
 
 def list_to_game(s):
-    # Template link: https://docs.google.com/spreadsheets/d/1_vBBsWn-EVc7npamLnOKHs34Mc2iAmd9hOGSzxHQX0Y/edit?usp=sharing
+    """
+    Parse standard Jeopardy format from Google Sheets.
+    Template link: https://docs.google.com/spreadsheets/d/1_vBBsWn-EVc7npamLnOKHs34Mc2iAmd9hOGSzxHQX0Y/edit?usp=sharing
+    """
     alpha = "BCDEFG"  # columns
     boards = []
     # gets single and double jeopardy rounds
@@ -42,12 +45,199 @@ def list_to_game(s):
     return GameData(boards, date, comments)
 
 
-def get_Gsheet_game(file_id):
+def list_to_medical_game(s):
+    """
+    Parse medical education format from Google Sheets.
+
+    Expected Medical Education Google Sheets format:
+    Row 0: Headers - Value, Cat1, Cat2, Cat3, Cat4, Cat5, Cat6, DD
+    Row 1: [100, Q1, Q2, Q3, Q4, Q5, Q6, DD_cells]
+    ...
+    Row 5: [500, Q1, Q2, Q3, Q4, Q5, Q6]
+    Row 6: [Answers header row]
+    Row 7-11: [value, A1, A2, A3, A4, A5, A6]
+    Row 12: [Rationale header row] (MEDICAL EXTENSION)
+    Row 13-17: [value, R1, R2, R3, R4, R5, R6] (MEDICAL EXTENSION)
+    Row 18: [Images header row] (MEDICAL EXTENSION)
+    Row 19-23: [value, IMG1, IMG2, IMG3, IMG4, IMG5, IMG6] (MEDICAL EXTENSION)
+    Row 24: [Difficulty header row] (MEDICAL EXTENSION)
+    Row 25-29: [value, D1, D2, D3, D4, D5, D6] (MEDICAL EXTENSION)
+    Row 30: [Specialty header row] (MEDICAL EXTENSION)
+    Row 31-35: [value, S1, S2, S3, S4, S5, S6] (MEDICAL EXTENSION)
+
+    Similar structure for Round 2, then Final Jeopardy at the end.
+    """
+    alpha = "BCDEFG"  # columns
+    boards = []
+
+    # Check if this is medical format (has more rows)
+    is_medical_format = len(s) > 30
+
+    # Round 1 starts at row 1, Round 2 at row 40 (for medical format)
+    round_starts = [1, 14] if not is_medical_format else [1, 50]
+
+    for round_idx, n1 in enumerate(round_starts):
+        if n1 >= len(s):
+            break
+
+        categories = s[n1 - 1][1:7] if len(s[n1 - 1]) >= 7 else s[n1 - 1][1:]
+        questions = []
+
+        for row in range(5):
+            if n1 + row >= len(s):
+                break
+
+            for col, cat in enumerate(categories):
+                address = alpha[col] + str(row + n1 + 1) if col < len(alpha) else ""
+                index = (col, row)
+
+                # Get question text
+                q_row = s[n1 + row] if n1 + row < len(s) else []
+                text = q_row[col + 1] if col + 1 < len(q_row) else ""
+
+                # Get answer
+                a_row_idx = n1 + 6 + row
+                a_row = s[a_row_idx] if a_row_idx < len(s) else []
+                answer = a_row[col + 1] if col + 1 < len(a_row) else ""
+
+                # Get value
+                value = int(q_row[0]) if q_row and q_row[0].isdigit() else MED_POINTS[round_idx][row]
+
+                # Check daily double
+                dd_col = s[n1 - 1][-1] if len(s[n1 - 1]) > 0 else ""
+                dd = address in dd_col
+
+                # Medical education extensions (if available)
+                rationale = None
+                image_url = None
+                difficulty = None
+                specialty = None
+
+                if is_medical_format:
+                    # Rationale (rows 12-16 for round 1, adjusted for round 2)
+                    rationale_base = n1 + 12
+                    if rationale_base + row < len(s):
+                        r_row = s[rationale_base + row]
+                        rationale = r_row[col + 1] if col + 1 < len(r_row) and r_row[col + 1] else None
+
+                    # Images (rows 18-22 for round 1)
+                    image_base = n1 + 18
+                    if image_base + row < len(s):
+                        i_row = s[image_base + row]
+                        image_url = i_row[col + 1] if col + 1 < len(i_row) and i_row[col + 1] else None
+
+                    # Difficulty (rows 24-28 for round 1)
+                    diff_base = n1 + 24
+                    if diff_base + row < len(s):
+                        d_row = s[diff_base + row]
+                        difficulty = d_row[col + 1] if col + 1 < len(d_row) and d_row[col + 1] else None
+
+                    # Specialty (rows 30-34 for round 1)
+                    spec_base = n1 + 30
+                    if spec_base + row < len(s):
+                        sp_row = s[spec_base + row]
+                        specialty = sp_row[col + 1] if col + 1 < len(sp_row) and sp_row[col + 1] else None
+
+                # Determine question type
+                question_type = "standard"
+                if image_url:
+                    question_type = "image"
+                elif len(text) > 200:  # Long questions are likely case vignettes
+                    question_type = "case"
+
+                questions.append(Question(
+                    index=index,
+                    text=text,
+                    answer=answer,
+                    category=cat,
+                    value=value,
+                    dd=dd,
+                    image_url=image_url,
+                    rationale=rationale,
+                    difficulty=difficulty,
+                    specialty=specialty,
+                    question_type=question_type
+                ))
+
+        boards.append(Board(categories, questions, dj=(round_idx == 1)))
+
+    # Final Jeopardy
+    fj = s[-1] if len(s) > 0 else []
+    if len(fj) >= 4:
+        index = (0, 0)
+        text = fj[2]
+        answer = fj[3]
+        category = fj[1]
+
+        # Medical extensions for Final Jeopardy
+        rationale = fj[4] if len(fj) > 4 else None
+        image_url = fj[5] if len(fj) > 5 else None
+        difficulty = fj[6] if len(fj) > 6 else None
+        specialty = fj[7] if len(fj) > 7 else None
+
+        question = Question(
+            index=index,
+            text=text,
+            answer=answer,
+            category=category,
+            rationale=rationale,
+            image_url=image_url,
+            difficulty=difficulty,
+            specialty=specialty
+        )
+        boards.append(FinalBoard(category, question))
+
+    # Get metadata
+    date = fj[8] if len(fj) > 8 else "Medical Education Game"
+    comments = fj[9] if len(fj) > 9 else ""
+
+    return GameData(boards, date, comments)
+
+
+def detect_sheet_format(s):
+    """Detect whether the sheet is standard or medical format."""
+    if len(s) < 15:
+        return "standard"
+
+    # Check for medical format indicators
+    # Look for "Rationale" or "Image" or "Difficulty" headers
+    for row in s[:40]:
+        if row and len(row) > 0:
+            first_cell = str(row[0]).lower()
+            if any(keyword in first_cell for keyword in ["rationale", "image", "difficulty", "specialty"]):
+                return "medical"
+
+    # Check if there are more than 30 rows (medical format is larger)
+    if len(s) > 40:
+        return "medical"
+
+    return "standard"
+
+
+def get_Gsheet_game(file_id, force_medical_format=False):
+    """
+    Get game from Google Sheets.
+
+    Args:
+        file_id: The Google Sheets file ID
+        force_medical_format: If True, always use medical format parser
+
+    Returns:
+        GameData object with parsed game content
+    """
     csv_url = f"https://docs.google.com/spreadsheet/ccc?key={file_id}&output=csv"
     with requests.get(csv_url, stream=True) as r:
         lines = (line.decode("utf-8") for line in r.iter_lines())
         r3 = csv.reader(lines)
-        return list_to_game(list(r3))
+        data = list(r3)
+
+        # Detect format and use appropriate parser
+        if force_medical_format or detect_sheet_format(data) == "medical":
+            logging.info("Using medical education format parser")
+            return list_to_medical_game(data)
+        else:
+            logging.info("Using standard format parser")
+            return list_to_game(data)
 
 
 class RetrievalException(Exception):

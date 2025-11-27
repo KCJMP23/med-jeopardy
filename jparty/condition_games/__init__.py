@@ -97,7 +97,7 @@ def _build_game_data(cg: ConditionGame) -> GameData:
     """Convert a ConditionGame to GameData format."""
     boards = []
 
-    # Build Round 1 (first 3 categories)
+    # Build Round 1 (all 6 categories)
     r1_categories = cg.categories[:6]
     r1_questions = []
     values = [100, 200, 300, 400, 500]

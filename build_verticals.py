@@ -53,12 +53,19 @@ VERTICALS = {
 def generate_spec(vertical_key: str, output_dir: str = "dist") -> str:
     """Generate a PyInstaller spec file for a specific vertical."""
     config = VERTICALS[vertical_key]
+
+    # Precompute config values to avoid nested quote issues in f-string
+    name = config["name"]
+    entry = config["entry"]
+    bundle_id = config["bundle_id"]
+    description = config["description"]
+
     uname = platform.uname()
     arch = uname.machine
     icon_ext = "icns" if uname.system == "Darwin" else "ico"
     iconfile = f"resources/icon.{icon_ext}"
 
-    spec_content = f'''# Auto-generated spec file for {config["description"]}
+    spec_content = f'''# Auto-generated spec file for {description}
 import sys, platform
 sys.path.append('')
 from jparty.version import version
@@ -67,7 +74,7 @@ uname = platform.uname()
 arch = uname.machine
 iconfile = "{iconfile}"
 
-a = Analysis(['{config["entry"]}'],
+a = Analysis(['{entry}'],
              pathex=['.'],
              binaries=[],
              datas=[
@@ -92,7 +99,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,
           [],
-          name='{config["name"]}',
+          name='{name}',
           debug=False,
           bootloader_ignore_signals=False,
           target_arch=arch,
@@ -104,15 +111,15 @@ exe = EXE(pyz,
 
 if uname.system == "Darwin":
     app = BUNDLE(exe,
-                 name='{config["name"]}.app',
+                 name='{name}.app',
                  version=version,
                  icon=iconfile,
-                 bundle_identifier='{config["bundle_id"]}')
+                 bundle_identifier='{bundle_id}')
 
-print(f"Built {config["name"]} for {{uname.system}} with architecture {{arch}}")
+print(f"Built {name} for {{uname.system}} with architecture {{arch}}")
 '''
 
-    spec_path = f'{config["name"]}.spec'
+    spec_path = f'{name}.spec'
     with open(spec_path, 'w') as f:
         f.write(spec_content)
 

@@ -12,9 +12,17 @@ import socket
 from jparty.environ import root
 from jparty.game import Player
 from jparty.constants import MAXPLAYERS, PORT
+from jparty.med_config import MedJeopardyConfig, AudienceSize
 
 
 define("port", default=PORT, help="run on the given port", type=int)
+
+
+def get_max_players(config: MedJeopardyConfig = None) -> int:
+    """Get max players based on configuration."""
+    if config is None:
+        return MAXPLAYERS
+    return config.max_players
 
 
 class Application(tornado.web.Application):
@@ -108,18 +116,33 @@ class BuzzerSocketHandler(tornado.websocket.WebSocketHandler):
         else:
             raise Exception("Unknown message")
 
-    def init_player(self, name):
+    def init_player(self, name, team_name=None):
 
         if not self.controller.accepting_players:
             logging.info("Game started!")
             self.send("GAMESTARTED")
             return
 
-        if len(self.controller.connected_players) >= MAXPLAYERS:
+        max_players = get_max_players(self.controller.config)
+        if len(self.controller.connected_players) >= max_players:
+            # Check if spectator mode is enabled
+            if self.controller.config.allow_spectators:
+                self.send("SPECTATOR")
+                self.controller.spectators.append(self)
+                logging.info(f"Spectator joined: {self.request.remote_ip}")
+                return
             self.send("FULL")
             return
 
         self.player = Player(name, self)
+
+        # Handle team assignment if team mode is enabled
+        if self.controller.config.teams.enabled and team_name:
+            self.player.team = team_name
+            if team_name not in self.controller.teams:
+                self.controller.teams[team_name] = []
+            self.controller.teams[team_name].append(self.player)
+
         self.application.controller.new_player(self.player)
         logging.info(
             f"New Player: {self.player} {self.request.remote_ip} {self.player.token.hex()}"
@@ -141,9 +164,10 @@ class BuzzerSocketHandler(tornado.websocket.WebSocketHandler):
 
 
 class BuzzerController:
-    def __init__(self, game):
+    def __init__(self, game, config: MedJeopardyConfig = None):
         self.thread = None
         self.game = game
+        self.config = config or MedJeopardyConfig()
         tornado.options.parse_command_line()
         self.app = Application(
             self
@@ -151,6 +175,8 @@ class BuzzerController:
         self.port = options.port
         self.connected_players = []
         self.accepting_players = True
+        self.teams = {}  # For team mode: team_name -> [players]
+        self.spectators = []  # For spectator mode
 
     def start(self, threaded=True, tries=0):
         try:

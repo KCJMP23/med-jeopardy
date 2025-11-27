@@ -1,1 +1,1 @@
-version = "2.1.0-dev"
+version = "3.0.0-med-edu"

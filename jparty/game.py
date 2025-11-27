@@ -14,7 +14,8 @@ from collections.abc import Iterable
 import logging
 
 from jparty.utils import SongPlayer, resource_path, CompoundObject, DDWagerDialog
-from jparty.constants import FJTIME, QUESTIONTIME, BUZZER_DELAY
+from jparty.constants import FJTIME, QUESTIONTIME, BUZZER_DELAY, QUESTIONTIME_EXTENDED, QUESTIONTIME_IMAGE, QUESTIONTIME_CASE
+from jparty.med_config import MedJeopardyConfig, GameMode
 
 
 class QuestionTimer(object):
@@ -126,6 +127,31 @@ class Question:
     value: int = -1
     dd: bool = False
     complete: bool = False
+    # Medical education extensions
+    image_url: str = None          # URL to clinical image (X-ray, CT, path slide, etc.)
+    rationale: str = None          # Educational explanation shown after answer
+    difficulty: str = None         # "basic", "intermediate", "advanced", "expert"
+    specialty: str = None          # Medical specialty (e.g., "Cardiology")
+    organ_system: str = None       # Organ system (e.g., "Cardiovascular")
+    question_type: str = "standard"  # "standard", "case", "image", "audio"
+    references: str = None         # References/sources for the question
+    keywords: list = None          # Keywords for categorization/search
+
+    def has_image(self) -> bool:
+        """Check if this question has an associated image."""
+        return self.image_url is not None and len(self.image_url) > 0
+
+    def has_rationale(self) -> bool:
+        """Check if this question has educational rationale."""
+        return self.rationale is not None and len(self.rationale) > 0
+
+    def get_timer_type(self) -> str:
+        """Get the appropriate timer type for this question."""
+        if self.question_type == "case":
+            return "complex_case"
+        elif self.question_type == "image" or self.has_image():
+            return "image_question"
+        return "standard_question"
 
 
 class Board(object):
@@ -174,8 +200,11 @@ class Game(QObject):
     wager_trigger = pyqtSignal(int, int)
     toolate_trigger = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, config: MedJeopardyConfig = None):
         super().__init__()
+
+        # Medical education configuration
+        self.config = config or MedJeopardyConfig()
 
         self.host_display = None
         self.main_display = None
@@ -200,6 +229,11 @@ class Game(QObject):
         self.buzzer_controller = None
 
         self.keystroke_manager = KeystrokeManager()
+
+        # Medical education state
+        self.show_rationale_after_answer = self.config.show_rationale
+        self.learning_mode = self.config.game_mode == GameMode.LEARNING
+        self.cme_tracker = None  # Will be set by main.py if CME tracking is enabled
 
         self.keystroke_manager.addEvent(
             "CORRECT_ANSWER", Qt.Key.Key_Left, self.correct_answer, self.arrowhints
@@ -290,6 +324,12 @@ class Game(QObject):
     def new_player(self):
         new_players = set(self.buzzer_controller.connected_players) - set(self.players)
         self.players = self.buzzer_controller.connected_players
+
+        # Register new players with CME tracker
+        if self.cme_tracker:
+            for player in new_players:
+                self.cme_tracker.record_participant(player)
+
         self.dc.scoreboard.refresh_players()
         if not self.game_started():
             self.host_display.welcome_widget.check_start()
@@ -308,15 +348,32 @@ class Game(QObject):
     def valid_game(self):
         return self.data is not None and all(b.complete() for b in self.data.rounds)
 
+    def get_question_timer_duration(self, question=None) -> int:
+        """Get the appropriate timer duration based on question type and config."""
+        q = question or self.active_question
+        if q is None:
+            return self.config.timers.standard_question
+
+        timer_type = q.get_timer_type()
+
+        if timer_type == "complex_case":
+            return self.config.timers.complex_case
+        elif timer_type == "image_question":
+            return self.config.timers.image_question
+        else:
+            return self.config.timers.standard_question
+
     def open_responses(self):
         self.dc.borders.lights(True)
         QApplication.processEvents()
-        time.sleep(BUZZER_DELAY)
+        time.sleep(self.config.timers.buzzer_delay)
 
         self.accepting_responses = True
 
         if not self.timer:
-            self.timer = QuestionTimer(QUESTIONTIME, self.stumped)
+            # Use configurable timer based on question type
+            duration = self.get_question_timer_duration()
+            self.timer = QuestionTimer(duration, self.stumped)
 
         self.timer.start()
 
@@ -440,7 +497,8 @@ class Game(QObject):
 
         self.song_player.final()
 
-        self.timer = QuestionTimer(FJTIME, self.final_finished_song)
+        # Use configurable Final Jeopardy timer
+        self.timer = QuestionTimer(self.config.timers.final_jeopardy, self.final_finished_song)
         self.timer.start()
 
     def final_next_player(self):
@@ -572,21 +630,62 @@ class Game(QObject):
         self.host_display.set_player_in_control(self.answering_player)
         self.dc.borders.lights(False)
 
+        # Record answer for CME tracking
+        self.answering_player.record_answer(
+            correct=True,
+            specialty=self.active_question.specialty
+        )
+        if self.cme_tracker:
+            self.cme_tracker.record_answer(
+                self.answering_player,
+                self.active_question,
+                correct=True
+            )
+
         if self.active_question.dd:
             wo = sa.WaveObject.from_wave_file(resource_path("applause.wav"))
             wo.play()
 
         self.answer_given()
-        self.back_to_board()
+
+        # Show rationale in learning mode before returning to board
+        if self.show_rationale_after_answer and self.active_question.has_rationale():
+            self._show_rationale()
+        else:
+            self.back_to_board()
+
+    def _show_rationale(self):
+        """Show educational rationale after answer in learning mode."""
+        if hasattr(self.host_display, 'question_widget') and self.host_display.question_widget:
+            self.host_display.question_widget.show_rationale()
+        # Activate space to continue after viewing rationale
+        self.keystroke_manager.activate("BACK_TO_BOARD")
 
     def incorrect_answer(self):
         self.set_score(
             self.answering_player,
             self.answering_player.score - self.active_question.value,
         )
+
+        # Record answer for CME tracking
+        self.answering_player.record_answer(
+            correct=False,
+            specialty=self.active_question.specialty
+        )
+        if self.cme_tracker:
+            self.cme_tracker.record_answer(
+                self.answering_player,
+                self.active_question,
+                correct=False
+            )
+
         self.answer_given()
         if self.active_question.dd:
-            self.back_to_board()
+            # Show rationale in learning mode before returning to board
+            if self.show_rationale_after_answer and self.active_question.has_rationale():
+                self._show_rationale()
+            else:
+                self.back_to_board()
         else:
             self.open_responses()
             self.timer.resume()
@@ -595,7 +694,12 @@ class Game(QObject):
         self.accepting_responses = False
         sa.WaveObject.from_wave_file(resource_path("stumped.wav")).play()
         self.dc.borders.flash()
-        self.keystroke_manager.activate("BACK_TO_BOARD")
+
+        # Show rationale in learning mode when no one answers
+        if self.show_rationale_after_answer and self.active_question.has_rationale():
+            self._show_rationale()
+        else:
+            self.keystroke_manager.activate("BACK_TO_BOARD")
 
     def __toolate(self):
         self.buzzer_controller.toolate()
@@ -619,6 +723,45 @@ class Game(QObject):
         QApplication.quit()
 
 
+class Team:
+    """Team class for team-based medical education sessions."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.members = []
+        self.score = 0
+        self.questions_answered = 0
+        self.questions_correct = 0
+
+    def add_member(self, player):
+        """Add a player to the team."""
+        if player not in self.members:
+            self.members.append(player)
+            player.team = self.name
+
+    def remove_member(self, player):
+        """Remove a player from the team."""
+        if player in self.members:
+            self.members.remove(player)
+            player.team = None
+
+    def total_score(self) -> int:
+        """Calculate total team score from all members."""
+        return sum(p.score for p in self.members)
+
+    def record_answer(self, correct: bool, specialty: str = None):
+        """Record an answer for team statistics."""
+        self.questions_answered += 1
+        if correct:
+            self.questions_correct += 1
+
+    def accuracy(self) -> float:
+        """Get team accuracy percentage."""
+        if self.questions_answered == 0:
+            return 0.0
+        return (self.questions_correct / self.questions_answered) * 100
+
+
 class Player(object):
     def __init__(self, name, waiter):
         self.name = name
@@ -628,9 +771,43 @@ class Player(object):
         self.wager = None
         self.finalanswer = ""
         self.page = "buzz"
+        # Medical education additions
+        self.team = None              # Team name if in team mode
+        self.team_obj = None          # Reference to Team object
+        self.questions_answered = 0   # For CME tracking
+        self.questions_correct = 0    # For performance tracking
+        self.specialty_scores = {}    # Track scores by specialty
 
     def __hash__(self):
         return int.from_bytes(self.token, sys.byteorder)
 
     def state(self):
-        return {"page": self.page, "score": self.score}
+        return {
+            "page": self.page,
+            "score": self.score,
+            "team": self.team,
+            "questions_answered": self.questions_answered,
+            "questions_correct": self.questions_correct
+        }
+
+    def record_answer(self, correct: bool, specialty: str = None):
+        """Record an answer for CME tracking."""
+        self.questions_answered += 1
+        if correct:
+            self.questions_correct += 1
+        if specialty:
+            if specialty not in self.specialty_scores:
+                self.specialty_scores[specialty] = {"correct": 0, "total": 0}
+            self.specialty_scores[specialty]["total"] += 1
+            if correct:
+                self.specialty_scores[specialty]["correct"] += 1
+
+    def accuracy(self) -> float:
+        """Get overall accuracy percentage."""
+        if self.questions_answered == 0:
+            return 0.0
+        return (self.questions_correct / self.questions_answered) * 100
+
+    def cme_eligible(self, min_questions: int = 5) -> bool:
+        """Check if player meets minimum participation for CME credit."""
+        return self.questions_answered >= min_questions

@@ -97,7 +97,7 @@ class Welcome(StartWidget):
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        self.title_label = DynamicLabel("JParty!", lambda: self.height() * 0.1, self)
+        self.title_label = DynamicLabel("Med-Jeopardy!", lambda: self.height() * 0.1, self)
         self.title_label.setFont(self.title_font)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

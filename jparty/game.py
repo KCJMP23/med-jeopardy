@@ -233,6 +233,7 @@ class Game(QObject):
         # Medical education state
         self.show_rationale_after_answer = self.config.show_rationale
         self.learning_mode = self.config.game_mode == GameMode.LEARNING
+        self.cme_tracker = None  # Will be set by main.py if CME tracking is enabled
 
         self.keystroke_manager.addEvent(
             "CORRECT_ANSWER", Qt.Key.Key_Left, self.correct_answer, self.arrowhints
@@ -323,6 +324,12 @@ class Game(QObject):
     def new_player(self):
         new_players = set(self.buzzer_controller.connected_players) - set(self.players)
         self.players = self.buzzer_controller.connected_players
+
+        # Register new players with CME tracker
+        if self.cme_tracker:
+            for player in new_players:
+                self.cme_tracker.record_participant(player)
+
         self.dc.scoreboard.refresh_players()
         if not self.game_started():
             self.host_display.welcome_widget.check_start()
@@ -628,6 +635,12 @@ class Game(QObject):
             correct=True,
             specialty=self.active_question.specialty
         )
+        if self.cme_tracker:
+            self.cme_tracker.record_answer(
+                self.answering_player,
+                self.active_question,
+                correct=True
+            )
 
         if self.active_question.dd:
             wo = sa.WaveObject.from_wave_file(resource_path("applause.wav"))
@@ -659,6 +672,12 @@ class Game(QObject):
             correct=False,
             specialty=self.active_question.specialty
         )
+        if self.cme_tracker:
+            self.cme_tracker.record_answer(
+                self.answering_player,
+                self.active_question,
+                correct=False
+            )
 
         self.answer_given()
         if self.active_question.dd:

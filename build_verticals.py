@@ -200,9 +200,8 @@ def main():
                 status = "SUCCESS" if success else "FAILED"
                 print(f"  {VERTICALS[vertical]['name']}: {status}")
 
-        # Exit with non-zero if any build failed
-        if not all(results.values()):
-            sys.exit(1)
+        # Exit with appropriate code based on build results
+        sys.exit(0 if all(results.values()) else 1)
     else:
         # Build all verticals
         success = build_all()
